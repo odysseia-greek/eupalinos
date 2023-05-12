@@ -1,39 +1,61 @@
 package eupalinos
 
-import (
-	amqp "github.com/rabbitmq/amqp091-go"
-)
+import "context"
 
 type RabbitClient interface {
-	Queue() Queue
+	PubSub() PubSub
 }
 
-type Queue interface {
-	Send(body []byte) error
-	ReceiveOne() (*amqp.Delivery, error)
+type PubSub interface {
+	Subscribe(sessions chan chan session, messages chan<- Message)
+	Publish(sessions chan chan session, messages <-chan Message)
+	Redial(ctx context.Context) chan chan session
 }
 
 type Rabbit struct {
-	queue *QueueImpl
+	pubsub *PubSubImpl
 }
 
-func New(connection, queueName string) (*Rabbit, error) {
-	conn, err := amqp.Dial(connection)
+type FakeRabbit struct {
+	pubsub *PubSubMockImpl
+}
 
-	queue, err := NewQueueImpl(conn, queueName)
+func New(queueName, exchange string) (*Rabbit, error) {
+	connection := CreateQueueConnectionStringFromEnv()
+	pubsub, err := NewPubSubImpl(connection, queueName, exchange)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Rabbit{
-		queue: queue,
+		pubsub: pubsub,
 	}, nil
 
 }
 
-func (r *Rabbit) Queue() Queue {
+func NewMockRabbit(queueName, exchange string) (*FakeRabbit, error) {
+	connection := CreateQueueConnectionStringFromEnv()
+	pubsub, err := NewPubSubMockImpl(connection, queueName, exchange)
+	if err != nil {
+		return nil, err
+	}
+
+	return &FakeRabbit{
+		pubsub: pubsub,
+	}, nil
+
+}
+
+func (r *Rabbit) PubSub() PubSub {
 	if r == nil {
 		return nil
 	}
-	return r.queue
+	return r.pubsub
+}
+
+func (r *FakeRabbit) PubSub() PubSub {
+	if r == nil {
+		return nil
+	}
+	return r.pubsub
 }
